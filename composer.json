@@ -1,0 +1,32 @@
+{
+  "name": "tourze/tls-client-core",
+  "description": "A comprehensive TLS client implementation providing core functionality for establishing secure TLS connections with proper state management and handshake flow control.",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "ext-hash": "*",
+    "tourze/enum-extra": "0.1.*",
+    "tourze/tls-alert": "0.0.*",
+    "tourze/tls-common": "0.0.*",
+    "tourze/tls-handshake-flow": "0.0.*",
+    "tourze/tls-handshake-negotiation": "0.0.*",
+    "tourze/tls-record": "0.0.*"
+  },
+  "require-dev": {
+    "ext-openssl": "*",
+    "phpstan/phpstan": "^2.1",
+    "phpunit/phpunit": "^11.5",
+    "tourze/phpunit-enum": "0.0.*",
+    "tourze/symfony-testing-framework": "0.0.*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Tourze\\TLSClientCore\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Tourze\\TLSClientCore\\Tests\\": "tests/"
+    }
+  }
+}
