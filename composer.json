@@ -5,7 +5,7 @@
   "license": "MIT",
   "require": {
     "ext-hash": "*",
-    "tourze/enum-extra": "1.*",
+    "tourze/enum-extra": "1.0.*",
     "tourze/tls-alert": "0.0.*",
     "tourze/tls-common": "0.0.*",
     "tourze/tls-handshake-flow": "0.0.*",
