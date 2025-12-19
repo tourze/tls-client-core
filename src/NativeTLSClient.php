@@ -40,7 +40,7 @@ final class NativeTLSClient
         }
 
         $timeout = (int) ($this->options['timeout'] ?? 30);
-        $version = (string) ($this->options['version'] ?? '1.3');
+        $version = (string) ($this->options['version'] ?? 'auto');
 
         $sslOptions = [
             'SNI_enabled' => true,
@@ -48,8 +48,13 @@ final class NativeTLSClient
             'verify_peer' => true,
             'verify_peer_name' => true,
             'allow_self_signed' => false,
-            // crypto_method 交给 OpenSSL 自动协商（保留默认更兼容）
         ];
+
+        $cryptoMethod = $this->resolveCryptoMethod($version);
+        if (null !== $cryptoMethod) {
+            // 明确限制协议版本，避免与上层 options['version'] 语义不一致
+            $sslOptions['crypto_method'] = $cryptoMethod;
+        }
 
         $context = stream_context_create(['ssl' => $sslOptions]);
 
@@ -74,6 +79,62 @@ final class NativeTLSClient
         stream_set_timeout($stream, $timeout);
 
         $this->stream = $stream;
+    }
+
+    /**
+     * 将版本字符串映射为 PHP 流加密方法常量。
+     *
+     * @return int|null 返回 null 表示交给 OpenSSL 自动协商
+     */
+    private function resolveCryptoMethod(string $version): ?int
+    {
+        $version = trim($version);
+
+        if ('' === $version || 'auto' === $version) {
+            return $this->resolveAutoCryptoMethod();
+        }
+
+        return $this->resolveSpecificCryptoMethod($version);
+    }
+
+    /**
+     * 自动协商加密方法（优先 TLS 1.2/1.3）
+     */
+    private function resolveAutoCryptoMethod(): ?int
+    {
+        $tls12 = $this->getCryptoConstant('STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT');
+        $tls13 = $this->getCryptoConstant('STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT');
+
+        if (null !== $tls12 && null !== $tls13) {
+            return $tls12 | $tls13;
+        }
+
+        return $tls12 ?? $this->getCryptoConstant('STREAM_CRYPTO_METHOD_TLS_CLIENT');
+    }
+
+    /**
+     * 解析指定版本的加密方法
+     */
+    private function resolveSpecificCryptoMethod(string $version): ?int
+    {
+        $constantMap = [
+            '1.0' => 'STREAM_CRYPTO_METHOD_TLSv1_0_CLIENT',
+            '1.1' => 'STREAM_CRYPTO_METHOD_TLSv1_1_CLIENT',
+            '1.2' => 'STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT',
+            '1.3' => 'STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT',
+        ];
+
+        $constant = $constantMap[$version] ?? null;
+
+        return null !== $constant ? $this->getCryptoConstant($constant) : null;
+    }
+
+    /**
+     * 安全获取加密常量值
+     */
+    private function getCryptoConstant(string $constantName): ?int
+    {
+        return \defined($constantName) ? \constant($constantName) : null;
     }
 
     public function close(): void
@@ -160,8 +221,6 @@ final class NativeTLSClient
         }
 
         $meta = stream_get_meta_data($this->stream);
-
-        // @phpstan-ignore-next-line - crypto key exists in TLS stream metadata
         return $meta['crypto'] ?? [];
     }
 }

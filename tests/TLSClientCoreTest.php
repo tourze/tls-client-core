@@ -207,4 +207,36 @@ final class TLSClientCoreTest extends TestCase
         $connectionManager = $client->getConnectionManager();
         $this->assertSame($options, $connectionManager->getOptions());
     }
+
+    public function testConnectBaiduWithNativeFallback(): void
+    {
+        // 跳过这个测试如果网络不可用或在CI环境中
+        if (false !== getenv('CI')) {
+            self::markTestSkipped('Network connectivity test skipped in CI');
+        }
+
+        try {
+            $client = new TLSClientCore('www.baidu.com', 443, [
+                'timeout' => 5,
+                'fallback_to_native' => true,
+            ]);
+            $client->connect();
+
+            $this->assertTrue($client->isEstablished());
+            $this->assertSame('established', $client->getState());
+
+            $client->sendData("GET / HTTP/1.1\r\nHost: www.baidu.com\r\nConnection: close\r\n\r\n");
+            $response = $client->receiveData();
+            $this->assertNotSame('', $response);
+            $this->assertStringContainsString('HTTP/', $response);
+
+            $meta = $client->getNativeCryptoMeta();
+            $this->assertArrayHasKey('protocol', $meta);
+
+            $client->close();
+        } catch (TLSException $e) {
+            // 如果连接失败，跳过测试而不是失败
+            self::markTestSkipped('Network connectivity test failed: ' . $e->getMessage());
+        }
+    }
 }

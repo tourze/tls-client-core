@@ -101,10 +101,17 @@ final class NativeTLSClientTest extends TestCase
         }
 
         try {
-            $client = new NativeTLSClient('google.com', 443, ['timeout' => 5]);
+            // 使用国内可访问的站点进行端到端验证
+            $client = new NativeTLSClient('www.baidu.com', 443, ['timeout' => 5]);
             $client->connect();
 
             $this->assertTrue($client->isEstablished());
+
+            // 发送一个最小的 HTTP/1.1 请求，验证读写通路可用
+            $client->send("GET / HTTP/1.1\r\nHost: www.baidu.com\r\nConnection: close\r\n\r\n");
+            $response = $client->receive(4096);
+            $this->assertNotSame('', $response);
+            $this->assertStringContainsString('HTTP/', $response);
 
             $client->close();
             $this->assertFalse($client->isEstablished());

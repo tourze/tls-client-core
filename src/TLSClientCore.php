@@ -25,6 +25,8 @@ final class TLSClientCore implements TLSProtocolInterface
 
     private ?NativeTLSClient $nativeClient = null;
 
+    private bool $fallbackToNative = true;
+
     /**
      * @param array<string, mixed> $options
      */
@@ -35,7 +37,15 @@ final class TLSClientCore implements TLSProtocolInterface
     ) {
         $this->connectionManager = new ClientConnectionManager($hostname, $port, $options);
         $this->stateMachine = new ClientStateMachine();
+        $this->fallbackToNative = (bool) ($options['fallback_to_native'] ?? true);
         $this->useNative = (bool) ($options['use_native'] ?? false);
+
+        // 当前纯 PHP 握手实现仅覆盖 TLS 1.3；当用户显式要求 1.2/1.1/1.0 时自动走原生实现（除非明确设置 use_native）。
+        $requestedVersion = (string) ($options['version'] ?? '1.3');
+        if (!$this->useNative && !array_key_exists('use_native', $options) && '1.3' !== $requestedVersion) {
+            $this->useNative = true;
+        }
+
         if ($this->useNative) {
             $this->nativeClient = new NativeTLSClient($hostname, $port, $options);
         }
@@ -102,11 +112,30 @@ final class TLSClientCore implements TLSProtocolInterface
                 $this->established = true;
                 $this->state = 'established';
             } else {
-                $this->connectionManager->establishConnection();
-                $this->performHandshake();
+                try {
+                    $this->connectionManager->establishConnection();
+                    $this->performHandshake();
 
-                $this->established = true;
-                $this->state = 'established';
+                    $this->established = true;
+                    $this->state = 'established';
+                } catch (\Throwable $e) {
+                    if (!$this->fallbackToNative) {
+                        throw $e;
+                    }
+
+                    // 纯实现握手失败时，回退到 PHP/OpenSSL 原生握手（主要用于 TLS 1.2 站点兼容）。
+                    $this->connectionManager->close();
+                    $this->useNative = true;
+                    $this->nativeClient ??= new NativeTLSClient(
+                        $this->connectionManager->getHostname(),
+                        $this->connectionManager->getPort(),
+                        $this->options,
+                    );
+                    $this->nativeClient->connect();
+
+                    $this->established = true;
+                    $this->state = 'established';
+                }
             }
         } catch (\Exception $e) {
             $this->state = 'error';
